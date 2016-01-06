@@ -1,0 +1,20 @@
+{
+    "listen": "127.0.0.1:17001",
+    "tls": true,
+    "ca_certificate": "ca.crt",
+    "certificate": "server.crt",
+    "private_key": "server.key",
+    "chain": "regtest",
+    "bitcoin": [
+        {
+            "username": "user1",
+            "password": "supersecurepasswordone",
+            "url": "http://127.0.1.1:17001"
+        },
+        {
+            "username": "user2",
+            "password": "supersecurepassword2",
+            "url": "http://127.0.2.1:17001"
+        }
+    ]
+}

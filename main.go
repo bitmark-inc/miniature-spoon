@@ -24,7 +24,12 @@ type SystemConfiguration struct {
 	CACertificate string                 `json:"ca_certificate"` // e.g. "ca.crt"
 	Certificate   string                 `json:"certificate"`    // e.g. "server.crt"
 	PrivateKey    string                 `json:"private_key"`    // e.g. "server.key"
+	RunAs         RunAsConfiguration     `json:"run_as"`
 	Bitcoin       []BitcoinConfiguration `json:"bitcoin"`
+}
+
+type RunAsConfiguration struct {
+	Username string `json:"username"` // e.g. "nobody",
 }
 
 type BitcoinConfiguration struct {
@@ -59,6 +64,13 @@ func main() {
 				log.Fatalf("Bitcoin[%d] error: %v\n", i, err)
 			}
 			defer rpcconn.Destroy()
+		}
+
+		if "" != system.RunAs.Username {
+			err := DropPrivTo(system.RunAs.Username)
+			if nil != err {
+				log.Fatalf("RunAs username: %q error: %v\n", system.RunAs.Username, err)
+			}
 		}
 
 		log.Fatal(server.ListenAndServe())
@@ -117,6 +129,13 @@ func main() {
 			log.Fatalf("Bitcoin[%d] error: %v\n", i, err)
 		}
 		defer rpcconn.Destroy()
+	}
+
+	if "" != system.RunAs.Username {
+		err := DropPrivTo(system.RunAs.Username)
+		if nil != err {
+			log.Fatalf("RunAs username: %q error: %v\n", system.RunAs.Username, err)
+		}
 	}
 
 	log.Fatal(server.ListenAndServeTLS("", ""))

@@ -5,6 +5,9 @@
     "certificate": "server.crt",
     "private_key": "server.key",
     "chain": "regtest",
+    "run_as": {
+        "username": "nobody"
+    },
     "bitcoin": [
         {
             "username": "user1",
@@ -13,7 +16,7 @@
         },
         {
             "username": "user2",
-            "password": "supersecurepassword2",
+            "password": "supersecurepasswordtwo",
             "url": "http://127.0.2.1:17001"
         }
     ]

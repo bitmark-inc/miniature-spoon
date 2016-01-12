@@ -7,3 +7,4 @@ Provide a limited proxy for Bitcoin RPC.
 * Retries failed bitcoind connections.
 * Uses CA, server and client certificates for authenticated TLS connection.
 * Checks that all bitcoind are on the same chain.
+* Drops priviledges after opening socket (OK on FreeBSD, fails on Linux)

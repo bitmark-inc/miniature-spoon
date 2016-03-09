@@ -41,7 +41,7 @@ type BitcoinConfiguration struct {
 // entry point
 func main() {
 	if len(os.Args) < 2 {
-		log.Printf("%s version: %s\n", os.Args[0], Version())
+		log.Printf("%s version: %s\n", os.Args[0], Version)
 		log.Fatalf("usage: %s config-file.json\n", os.Args[0])
 	}
 	configurationFileName := os.Args[1]

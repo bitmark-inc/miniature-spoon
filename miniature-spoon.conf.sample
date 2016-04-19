@@ -1,6 +1,8 @@
 {
     "listen": "127.0.0.1:17001",
+    "server_name": "btcproxy",
     "tls": true,
+    "client_auth": true,
     "ca_certificate": "ca.crt",
     "certificate": "server.crt",
     "private_key": "server.key",
@@ -10,11 +12,13 @@
     },
     "bitcoin": [
         {
+            "enable": true,
             "username": "user1",
             "password": "supersecurepasswordone",
             "url": "http://127.0.1.1:17001"
         },
         {
+            "enable": true,
             "username": "user2",
             "password": "supersecurepasswordtwo",
             "url": "http://127.0.2.1:17001"

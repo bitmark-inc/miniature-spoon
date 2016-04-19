@@ -20,7 +20,9 @@ import (
 // global system configuration for the program
 type SystemConfiguration struct {
 	Listen        string                 `json:"listen"`         // e.g. "127.0.0.1:1234"
+	ServerName    string                 `json:"server_name"`    // e.g. "proxy.domain.tld"
 	TLS           bool                   `json:"tls"`            // e.g. true (then files below must exist)
+	ClientAuth    bool                   `json:"client_auth"`    // e.g. true (then client must use certificate)
 	CACertificate string                 `json:"ca_certificate"` // e.g. "ca.crt"
 	Certificate   string                 `json:"certificate"`    // e.g. "server.crt"
 	PrivateKey    string                 `json:"private_key"`    // e.g. "server.key"
@@ -33,6 +35,7 @@ type RunAsConfiguration struct {
 }
 
 type BitcoinConfiguration struct {
+	Enable   bool   `json:"enable"`   // e.g. true
 	Username string `json:"username"` // e.g. "user",
 	Password string `json:"password"` // e.g. "some securepassword"
 	URL      string `json:"url"`      // e.g. "http://127.0.0.1:17001"
@@ -104,6 +107,16 @@ func main() {
 		log.Fatalf("failed to parse certificate from: %q", system.CACertificate)
 	}
 
+	// optional authentication
+	clientAuth := tls.RequireAndVerifyClientCert
+	if !system.ClientAuth {
+		clientAuth = tls.VerifyClientCertIfGiven
+	}
+
+	serverName := "bitcoin-proxy"
+	if "" != system.ServerName {
+		serverName = system.ServerName
+	}
 	server.TLSConfig = &tls.Config{
 		Certificates: []tls.Certificate{
 			keyPair,
@@ -112,8 +125,8 @@ func main() {
 		GetCertificate:           nil,
 		RootCAs:                  certificatePool,
 		NextProtos:               nil,
-		ServerName:               "bitcoin-proxy",
-		ClientAuth:               tls.RequireAndVerifyClientCert,
+		ServerName:               serverName,
+		ClientAuth:               clientAuth,
 		ClientCAs:                certificatePool,
 		InsecureSkipVerify:       false,
 		CipherSuites:             nil,
@@ -123,12 +136,27 @@ func main() {
 		CurvePreferences:         nil,
 	}
 
+	connections := 0
+	continueRunning := true
 	for i, btConf := range system.Bitcoin {
-		rpcconn, err := NewBitcoinConnection(btConf.URL, btConf.Username, btConf.Password)
-		if nil != err {
-			log.Fatalf("Bitcoin[%d] error: %v\n", i, err)
+		if !btConf.Enable {
+			continue
 		}
-		defer rpcconn.Destroy()
+		rpcconn, err := NewBitcoinConnection(btConf.URL, btConf.Username, btConf.Password)
+		if ErrAccessDenied == err {
+			log.Printf("Bitcoin[%d] %q error: %v\n", i, btConf.URL, err)
+			continueRunning = false
+		} else if nil != err {
+			log.Printf("Bitcoin[%d] %q  error: %v\n", i, btConf.URL, err)
+		} else {
+			connections += 1
+			defer rpcconn.Destroy()
+		}
+	}
+	if 0 == connections {
+		log.Fatal("no connected Bitcoin servers")
+	} else if !continueRunning {
+		log.Fatal("invalid bitcoin authentication configuration")
 	}
 
 	if "" != system.RunAs.Username {

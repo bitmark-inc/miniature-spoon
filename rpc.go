@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	//"log"
 	"net/http"
@@ -33,6 +34,7 @@ var (
 	ErrIncomprehesibleResponse = errors.New("incomprehesible response")
 	ErrHexLengthIncorrect      = errors.New("hex length incorrect")
 	ErrInvalidBool             = errors.New("invalid bool: 0/1 expected")
+	ErrAccessDenied            = errors.New("Access denied")
 )
 
 // RPC request
@@ -383,7 +385,7 @@ func (conn *BitcoinConnection) bitcoinRPC(arguments *bitcoinArguments, reply *bi
 
 	postData := bytes.NewBuffer(s)
 
-	request, err := http.NewRequest("POST", conn.url, postData)
+	request, err := http.NewRequest(http.MethodPost, conn.url, postData)
 	if nil != err {
 		return err
 	}
@@ -394,15 +396,21 @@ func (conn *BitcoinConnection) bitcoinRPC(arguments *bitcoinArguments, reply *bi
 		return err
 	}
 	defer response.Body.Close()
+
 	body, err := ioutil.ReadAll(response.Body)
 	if nil != err {
 		return err
 	}
 
-	err = json.Unmarshal(body, &reply)
-	if nil != err {
-		return err
+	if http.StatusOK == response.StatusCode {
+		err = json.Unmarshal(body, &reply)
+		if nil != err {
+			return err
+		}
+		return nil
 	}
-
-	return nil
+	if http.StatusUnauthorized == response.StatusCode {
+		return ErrAccessDenied
+	}
+	return fmt.Errorf("http failed: %q", response.Status)
 }

@@ -98,7 +98,7 @@ func (f aHandler) send(w http.ResponseWriter, r *http.Request, data *Request) in
 
 	//log.Printf("data: %v\n", data)
 
-	resp, rpcerr, err := BitcoinCall(data.Method, data.Parameters)
+	resp, rpcerr, err := RemoteCall(data.Method, data.Parameters)
 	//log.Printf("resp: %v\n", resp)
 	//log.Printf("resp: %s\n", resp)
 	//log.Printf("RPC error: %v\n", rpcerr)

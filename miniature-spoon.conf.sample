@@ -1,27 +1,48 @@
-{
-    "listen": "127.0.0.1:17001",
-    "server_name": "btcproxy",
-    "tls": true,
-    "client_auth": true,
-    "ca_certificate": "ca.crt",
-    "certificate": "server.crt",
-    "private_key": "server.key",
-    "chain": "regtest",
-    "run_as": {
-        "username": "nobody"
-    },
-    "bitcoin": [
-        {
-            "enable": true,
-            "username": "user1",
-            "password": "supersecurepasswordone",
-            "url": "http://127.0.1.1:17001"
-        },
-        {
-            "enable": true,
-            "username": "user2",
-            "password": "supersecurepasswordtwo",
-            "url": "http://127.0.2.1:17001"
-        }
-    ]
+# miniature spoon configuration
+
+# listent address and port
+listen = "127.0.0.1:17001"
+
+# server name, must match the value from "certificate" below
+server_name = "btcproxy"
+
+# to enable TLS (recommended)
+tls = true
+
+# to require clients provide a certificate that is signed by the
+# ROOT CA ad defined in "ca_certificate" parameter
+client_auth = true
+
+# the root of the certificate
+ca_certificate = "ca.crt"
+
+# server certificate first, followed by rest of chain
+# but must exclude the final ROOT CA certificate
+certificate = "server.crt"
+
+# private key corresponding to first certificate in "certificate" file
+private_key = "server.key"
+
+# the bitcoin chain that this proxies
+chain = regtest
+
+# only for FreeBSD to drop privileges
+run_as {
+  username = "nobody"
 }
+
+# list of servers
+servers [
+  {
+    enable = true
+    username = "user1"
+    password = "supersecurepasswordone"
+    url = "http://127.0.1.1:17001"
+  }
+  {
+    enable = true
+    username = "user2"
+    password = "supersecurepasswordtwo"
+    url = "http://127.0.2.1:17001"
+  }
+]

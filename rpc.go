@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2015 Bitmark Inc.
+// Copyright (c) 2014-2016 Bitmark Inc.
 // Use of this source code is governed by an ISC
 // license that can be found in the LICENSE file.
 
@@ -6,12 +6,12 @@ package main
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
-	//"log"
 	"net/http"
 	"sync"
 )
@@ -26,6 +26,7 @@ const (
 var (
 	//ErrNotInitialised          = errors.New("not initialised")
 	ErrInvalidBitcoinVersion   = errors.New("invalid bitcoin version")
+	ErrInvalidBitcoinChain     = errors.New("invalid bitcoin chain")
 	ErrInvalidMethod           = errors.New("invalid method")
 	ErrTooFewArguments         = errors.New("too few arguments")
 	ErrTooManyArguments        = errors.New("too many arguments")
@@ -46,7 +47,7 @@ type Call struct {
 }
 
 // globals for background proccess
-type BitcoinConnection struct {
+type RemoteConnection struct {
 	sync.RWMutex // to allow locking
 
 	// connection to bitcoin daemon
@@ -73,39 +74,61 @@ var sharedQueue = make(chan Call)
 
 // external API
 // ------------
-func NewBitcoinConnection(url string, username string, password string) (*BitcoinConnection, error) {
 
-	conn := BitcoinConnection{
+// connet to a either bitcoind or a miniature-spoon proxy
+func NewRemoteConnection(url string, username string, password string, chain string, tls *tls.Config) (*RemoteConnection, error) {
+
+	conn := RemoteConnection{
 		id:       0,
 		username: username,
 		password: password,
 		url:      url,
 
-		client: new(http.Client),
+		client: &http.Client{},
 
 		shutdown: make(chan bool),
 		finished: make(chan bool),
 	}
 
-	// query bitcoind for status
+	if nil != tls {
+		conn.client.Transport = &http.Transport{
+			TLSClientConfig: tls,
+		}
+	}
+
+	// query bitcoind for blockchain status
 	// only need to have necessary fields as JSON unmarshaller will ignore excess
-	var reply struct {
+	var blockchainReply struct {
+		Chain string `json:"chain"`
+		//Blocks uint64 `json:"blocks"`
+	}
+	var rpcErr interface{}
+	err := conn.remoteCall("getblockchaininfo", []interface{}{}, &blockchainReply, &rpcErr)
+	if nil != err {
+		return nil, err
+	}
+	if chain != blockchainReply.Chain {
+		return nil, ErrInvalidBitcoinChain
+	}
+
+	// query bitcoind for general status
+	// only need to have necessary fields as JSON unmarshaller will ignore excess
+	var infoReply struct {
 		Version uint64 `json:"version"`
 		Blocks  uint64 `json:"blocks"`
 	}
-	var rpcErr interface{}
-	err := conn.bitcoinCall("getinfo", []interface{}{}, &reply, &rpcErr)
+	err = conn.remoteCall("getinfo", []interface{}{}, &infoReply, &rpcErr)
 	if nil != err {
 		return nil, err
 	}
 
 	// check version is sufficient
-	if reply.Version < bitcoinMinimumVersion {
+	if infoReply.Version < bitcoinMinimumVersion {
 		return nil, ErrInvalidBitcoinVersion
 	}
 
 	// set up current block number
-	conn.latestBlockNumber = reply.Blocks
+	conn.latestBlockNumber = infoReply.Blocks
 
 	// start background processes
 	go conn.background(sharedQueue)
@@ -114,7 +137,7 @@ func NewBitcoinConnection(url string, username string, password string) (*Bitcoi
 }
 
 // finialise - stop all background tasks
-func (conn *BitcoinConnection) Destroy() {
+func (conn *RemoteConnection) Destroy() {
 
 	// stop background
 	close(conn.shutdown)
@@ -131,7 +154,7 @@ type RawResult json.RawMessage
 var jsonNull = json.RawMessage("null")
 
 // the main RPC calling routine
-func BitcoinCall(method string, arguments []json.RawMessage) (json.RawMessage, json.RawMessage, error) {
+func RemoteCall(method string, arguments []json.RawMessage) (json.RawMessage, json.RawMessage, error) {
 	r := make(chan interface{})
 	c := Call{
 		Method:    method,
@@ -166,7 +189,7 @@ func BitcoinCall(method string, arguments []json.RawMessage) (json.RawMessage, j
 }
 
 // background process
-func (conn *BitcoinConnection) background(queue <-chan Call) {
+func (conn *RemoteConnection) background(queue <-chan Call) {
 
 loop:
 	for {
@@ -228,7 +251,7 @@ func getNumber(argument json.RawMessage) (uint64, error) {
 }
 
 // process only allowable RPCs
-func (conn *BitcoinConnection) processCall(method string, arguments []json.RawMessage, reply *json.RawMessage, rpcErr *json.RawMessage) error {
+func (conn *RemoteConnection) processCall(method string, arguments []json.RawMessage, reply *json.RawMessage, rpcErr *json.RawMessage) error {
 
 	count := len(arguments)
 
@@ -238,13 +261,19 @@ func (conn *BitcoinConnection) processCall(method string, arguments []json.RawMe
 		if 0 != count {
 			return ErrTooManyArguments
 		}
-		return conn.bitcoinCall("getinfo", []interface{}{}, reply, rpcErr)
+		return conn.remoteCall("getinfo", []interface{}{}, reply, rpcErr)
+
+	case "getblockchaininfo":
+		if 0 != count {
+			return ErrTooManyArguments
+		}
+		return conn.remoteCall("getblockchaininfo", []interface{}{}, reply, rpcErr)
 
 	case "getblockcount":
 		if 0 != count {
 			return ErrTooManyArguments
 		}
-		return conn.bitcoinCall("getblockcount", []interface{}{}, reply, rpcErr)
+		return conn.remoteCall("getblockcount", []interface{}{}, reply, rpcErr)
 
 	case "getblockhash":
 		if count < 1 {
@@ -258,7 +287,7 @@ func (conn *BitcoinConnection) processCall(method string, arguments []json.RawMe
 			return err
 		}
 
-		return conn.bitcoinCall("getblockhash", []interface{}{number}, reply, rpcErr)
+		return conn.remoteCall("getblockhash", []interface{}{number}, reply, rpcErr)
 
 	case "getblock":
 		if count < 1 {
@@ -272,7 +301,7 @@ func (conn *BitcoinConnection) processCall(method string, arguments []json.RawMe
 			return err
 		}
 
-		return conn.bitcoinCall("getblock", []interface{}{hash}, reply, rpcErr)
+		return conn.remoteCall("getblock", []interface{}{hash}, reply, rpcErr)
 
 	case "getrawtransaction":
 
@@ -297,7 +326,7 @@ func (conn *BitcoinConnection) processCall(method string, arguments []json.RawMe
 			}
 		}
 
-		return conn.bitcoinCall("getrawtransaction", []interface{}{hash, number}, reply, rpcErr)
+		return conn.remoteCall("getrawtransaction", []interface{}{hash, number}, reply, rpcErr)
 
 	case "decoderawtransaction":
 		if count < 1 {
@@ -311,7 +340,7 @@ func (conn *BitcoinConnection) processCall(method string, arguments []json.RawMe
 			return err
 		}
 
-		return conn.bitcoinCall("decoderawtransaction", []interface{}{hexData}, reply, rpcErr)
+		return conn.remoteCall("decoderawtransaction", []interface{}{hexData}, reply, rpcErr)
 
 	case "sendrawtransaction":
 		if count < 1 {
@@ -325,7 +354,7 @@ func (conn *BitcoinConnection) processCall(method string, arguments []json.RawMe
 			return err
 		}
 
-		return conn.bitcoinCall("sendrawtransaction", []interface{}{hexData}, reply, rpcErr)
+		return conn.remoteCall("sendrawtransaction", []interface{}{hexData}, reply, rpcErr)
 
 	default:
 		return ErrInvalidMethod
@@ -337,7 +366,7 @@ func (conn *BitcoinConnection) processCall(method string, arguments []json.RawMe
 
 // high level call - only use while global data locked
 // because the HTTP RPC cannot interleave calls and responses
-func (conn *BitcoinConnection) bitcoinCall(method string, params []interface{}, reply interface{}, rpcerr interface{}) error {
+func (conn *RemoteConnection) remoteCall(method string, params []interface{}, reply interface{}, rpcerr interface{}) error {
 
 	conn.id += 1
 
@@ -376,7 +405,7 @@ type bitcoinReply struct {
 }
 
 // basic RPC - only use while global data locked
-func (conn *BitcoinConnection) bitcoinRPC(arguments *bitcoinArguments, reply *bitcoinReply) error {
+func (conn *RemoteConnection) bitcoinRPC(arguments *bitcoinArguments, reply *bitcoinReply) error {
 
 	s, err := json.Marshal(arguments)
 	if nil != err {

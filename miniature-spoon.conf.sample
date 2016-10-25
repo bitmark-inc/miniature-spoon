@@ -14,14 +14,14 @@ tls = true
 client_auth = true
 
 # the root of the certificate
-ca_certificate = "ca.crt"
+ca_certificate = "/usr/local/etc/miniature-spoon.d/ca.crt"
 
 # server certificate first, followed by rest of chain
 # but must exclude the final ROOT CA certificate
-certificate = "server.crt"
+certificate = "/usr/local/etc/miniature-spoon.d/server.crt"
 
 # private key corresponding to first certificate in "certificate" file
-private_key = "server.key"
+private_key = "/usr/local/etc/miniature-spoon.d/server.key"
 
 # the bitcoin chain that this proxies
 chain = regtest
@@ -32,7 +32,7 @@ run_as {
 }
 
 # list of servers
-servers [
+remotes [
   {
     enable = true
     username = "user1"

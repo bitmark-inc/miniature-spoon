@@ -342,20 +342,6 @@ func (conn *RemoteConnection) processCall(method string, arguments []json.RawMes
 
 		return conn.remoteCall("decoderawtransaction", []interface{}{hexData}, reply, rpcErr)
 
-	case "sendrawtransaction":
-		if count < 1 {
-			return ErrTooFewArguments
-		} else if count > 1 {
-			return ErrTooManyArguments
-		}
-
-		hexData, err := getHex(arguments[0], 0)
-		if nil != err {
-			return err
-		}
-
-		return conn.remoteCall("sendrawtransaction", []interface{}{hexData}, reply, rpcErr)
-
 	default:
 		return ErrInvalidMethod
 	}

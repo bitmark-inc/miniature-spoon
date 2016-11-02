@@ -6,7 +6,7 @@ package main
 
 // the version
 const (
-	Major   = "1"
-	Minor   = "3"
+	Major   = "2"
+	Minor   = "0"
 	Version = Major + "." + Minor
 )
